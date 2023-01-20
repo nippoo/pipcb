@@ -1,3 +1,5 @@
+PipCB
+========
 This repository houses the electronics, firmware, and case design for the PipCB.
 
 This board was designed with and to the specifications of Pip Coen and colleagues at the CortexLab (pipcoen@gmail.com). It comprises several different, independent sections, designed to replace a number of different individual components in use for experimental neuroscience rigs at the CortexLab. As such the design serves lots of different (somewhat unrelated) tasks and it is unlikely that another user will use all of its features!
