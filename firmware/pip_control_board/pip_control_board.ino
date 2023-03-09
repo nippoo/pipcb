@@ -28,6 +28,11 @@ volatile bool syncTrigger;
 volatile int syncCount;
 volatile bool syncLive;
 
+volatile int flipperState;
+volatile int flipperForceCount;
+volatile int flipperPrev;
+
+
 // PID parameters for Peltier (P = 5, I = 5, D = 1 as a guess)
 PID myPID(&CurrTemp, &PeltierPWM, &TargetTemp,5,5,1, REVERSE);
 
@@ -58,23 +63,12 @@ void setup(void)
   syncTrigger = 0;
   syncCount = 0;
   syncLive = 1;
+  flipperForceCount = 0;
+  flipperPrev = 0;
 
   cli();//stop interrupts
 
-//set timer0 interrupt at 1kHz
-  TCCR0A = 0;// set entire TCCR2A register to 0
-  TCCR0B = 0;// same for TCCR2B
-  TCNT0  = 0;//initialize counter value to 0
-  // set compare match register for 1khz increments
-  OCR0A = 249;// = (16*10^6) / (2000*64) - 1 (must be <256)
-  // turn on CTC mode
-  TCCR0A |= (1 << WGM01);
-  // Set CS01 and CS00 bits for 64 prescaler
-  TCCR0B |= (1 << CS01) | (1 << CS00);   
-  // enable timer compare interrupt
-  TIMSK0 |= (1 << OCIE0A);
-
-//set timer1 interrupt at 100Hz for flipper
+//set timer1 interrupt at 10Hz for flipper
   TCCR1A = 0;// set entire TCCR1A register to 0
   TCCR1B = 0;// same for TCCR1B
   TCNT1  = 0;//initialize counter value to 0
@@ -91,9 +85,22 @@ sei();//allow interrupts
 
 }
 
-ISR(TIMER1_COMPA_vect){ // flipper code, runs at 100Hz
+ISR(TIMER1_COMPA_vect){ // flipper code, runs at 10Hz
+
     if(digitalRead(FLIPPER_ENABLE_PIN)){
-      int flipperState = random(0,2);
+      flipperState = random(0,2);
+      if (flipperForceCount > 9 && flipperState==flipperPrev){
+        flipperState = (flipperState-1)*-1;
+      }
+      if (flipperState == flipperPrev){
+        flipperForceCount = flipperForceCount + 1;
+        }
+
+      if (flipperState != flipperPrev){
+        flipperPrev = flipperState;
+        flipperForceCount = 0;
+      }
+
       digitalWrite(FLIPPER_OUT_PIN, flipperState);
       digitalWrite(LED_STATUS_PIN, flipperState);
     }  
@@ -101,9 +108,8 @@ ISR(TIMER1_COMPA_vect){ // flipper code, runs at 100Hz
     digitalWrite(FLIPPER_OUT_PIN,LOW);
     digitalWrite(LED_STATUS_PIN, LOW);
     }
-}
-  
-ISR(TIMER0_COMPA_vect){ // flipper code, runs at 100Hz
+
+
  if(syncTrigger != digitalRead(FLIPPER_ENABLE_PIN)){
     Serial.println("Detected Trigger");
     syncTrigger = digitalRead(FLIPPER_ENABLE_PIN);
@@ -111,14 +117,10 @@ ISR(TIMER0_COMPA_vect){ // flipper code, runs at 100Hz
     digitalWrite(CAM_SYNC_PIN, LOW);
     syncCount = 0;
     syncLive = 1;
-  Serial.print("SyncCount: ");
-   Serial.println(syncCount);
  }
-  if(syncCount >= 200){
+  if(syncCount >= 2){
    digitalWrite(MIC_SYNC_PIN, LOW);
    digitalWrite(CAM_SYNC_PIN, HIGH);
-   Serial.print("SyncCount: ");
-   Serial.println(syncCount);
    syncLive = 0;
    syncCount = 0;
   } 
@@ -126,8 +128,8 @@ ISR(TIMER0_COMPA_vect){ // flipper code, runs at 100Hz
  if (syncLive == 1){
    syncCount = syncCount+1;
     }
-}
 
+}
 
 void loop(void) // update Peltier PWM value and serial print every 2s
 { 
